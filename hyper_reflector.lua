@@ -5,8 +5,20 @@ local util_draw = require("src/utils/draw");
 local util_colors = require("src/utils/colors")
 require("src/tools") -- TODO: refactor tools to export;
 -- local command_file = "../../hyper_write_commands.txt"
-local ext_command_file = "../../hyper_read_commands.txt" -- this is for sending back commands to electron.
-local match_track_file = "../../hyper_track_match.txt"
+local function resolve_files_base()
+    local source = debug.getinfo(1, "S").source or ''
+    if source:sub(1, 1) == '@' then source = source:sub(2) end
+    source = source:gsub('\\', '/')
+    local dir = source:match("^(.*)/[^/]+$") or '.'
+    local files_dir = dir:gsub('/lua/3rd_training_lua$', '')
+    return files_dir
+end
+
+local FILES_BASE = resolve_files_base()
+local function join_files_path(relative) return FILES_BASE .. '/' .. relative end
+
+local ext_command_file = join_files_path("hyper_read_commands.txt") -- this is for sending back commands to electron.
+local match_track_file = join_files_path("hyper_track_match.txt")
 local module_character_select = require("src/modules/character_select")
 
 -- game state 
@@ -15,6 +27,110 @@ require("src/gamestate")
 math.randomseed(os.time())
 
 local function unique_id() return tostring(os.time()) .. tostring(math.random(100000, 999999)) end
+
+local function escape_json_string(str)
+    if not str then return '' end
+    str = str:gsub('\\', '\\\\')
+    str = str:gsub('"', '\\"')
+    str = str:gsub('\b', '\\b')
+    str = str:gsub('\f', '\\f')
+    str = str:gsub('\n', '\\n')
+    str = str:gsub('\r', '\\r')
+    str = str:gsub('\t', '\\t')
+    return str
+end
+
+local function is_array(tbl)
+    if type(tbl) ~= 'table' then return false end
+    local count = 0
+    for key, _ in pairs(tbl) do
+        if type(key) ~= 'number' then return false end
+        count = count + 1
+    end
+    return count == #tbl
+end
+
+local function encode_json(value)
+    local t = type(value)
+    if t == 'nil' then return 'null' end
+    if t == 'number' then return tostring(value) end
+    if t == 'boolean' then return value and 'true' or 'false' end
+    if t == 'string' then return '"' .. escape_json_string(value) .. '"' end
+    if t == 'table' then
+        local buffer = {}
+        if is_array(value) then
+            for i = 1, #value do buffer[#buffer + 1] = encode_json(value[i]) end
+            return '[' .. table.concat(buffer, ',') .. ']'
+        else
+            local keys = {}
+            for key, _ in pairs(value) do keys[#keys + 1] = key end
+            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+            for _, key in ipairs(keys) do buffer[#buffer + 1] = '"' .. escape_json_string(tostring(key)) .. '":' .. encode_json(value[key]) end
+            return '{' .. table.concat(buffer, ',') .. '}'
+        end
+    end
+    return 'null'
+end
+
+local function parse_match_text(raw)
+    if not raw or raw == '' then return nil end
+
+    local result = {}
+
+    for line in raw:gmatch("[^\r\n]+") do
+        local trimmed = line:gsub("^%s+", "")
+        trimmed = trimmed:gsub("%s+$", "")
+        if trimmed ~= '' then
+            local key, value = trimmed:match("^([^:]+):?(.*)$")
+            if key then
+                key = key:gsub("%s+$", "")
+                value = value or ''
+                value = value:gsub("^%s+", "")
+                local parsed_value = nil
+                if value ~= '' then
+                    local lower = value:lower()
+                    if lower == 'true' then
+                        parsed_value = true
+                    elseif lower == 'false' then
+                        parsed_value = false
+                    else
+                        parsed_value = tonumber(value) or value
+                    end
+                end
+
+                if parsed_value ~= nil then
+                    if result[key] ~= nil then
+                        if type(result[key]) ~= 'table' or not is_array(result[key]) then result[key] = {result[key]} end
+                        table.insert(result[key], parsed_value)
+                    else
+                        result[key] = parsed_value
+                    end
+                end
+            end
+        end
+    end
+
+    if result["match-uuid"] == nil then result["match-uuid"] = match_uuid end
+
+    return result
+end
+
+local function convert_match_file_to_json()
+    local source = io.open(match_track_file, "r")
+    if not source then return false end
+    local raw = source:read("*a")
+    source:close()
+    local payload = parse_match_text(raw)
+    if not payload then return false end
+    payload["created-at"] = payload["created-at"] or os.time()
+    payload["converted-at"] = os.time()
+    local encoded = encode_json(payload)
+    local writer = io.open(match_track_file, "w")
+    if not writer then return false end
+    writer:write(encoded)
+    writer:close()
+    return true
+end
 
 -- state
 local game_name = ""
@@ -75,7 +191,7 @@ end
 local function check_in_match()
     local character_select_state = memory.readbyte(0x02015545)
     local match_state = memory.readbyte(0x020154A7);
-    print(character_select_state)
+    -- print(character_select_state)
     -- if match_state == 0 then -- this indicates the emulator was restarted in some way
     --     player_1_win_count = 0
     --     player_2_win_count = 0
@@ -304,6 +420,7 @@ function GLOBAL_read_stat_memory()
                 match_initialized = false
                 print('Closing file one frame late to capture final meter.')
                 stat_file:close()
+                convert_match_file_to_json()
                 stat_file = nil
                 local front_end_reader = io.open(ext_command_file, "w")
                 if front_end_reader then
@@ -339,25 +456,18 @@ function GLOBAL_read_stat_memory()
     end
 end
 
-local function game_closing()
-    local closing_file = io.open(match_track_file, "a")
-    if closing_file then
-        closing_file:write('')
-        closing_file:write('\n -i-game-ended:1')
-        closing_file:close()
+local function write_simple_event(name)
+    local file = io.open(match_track_file, "w")
+    if file then
+        file:write('{"event":"' .. name .. '"}')
+        file:close()
     end
 end
 
+local function game_closing() write_simple_event('game-ended') end
+
 local function game_starting()
-    -- erase all data on game start, just in case
-    io.open(match_track_file, "w"):close()
-    -- write game start
-    local stat_file = io.open(match_track_file, "a")
-    if stat_file then
-        stat_file:write('')
-        stat_file:write('\n -i-game-started')
-        stat_file:close()
-    end
+    write_simple_event('game-started')
     module_character_select.start_character_select_sequence()
 end
 
