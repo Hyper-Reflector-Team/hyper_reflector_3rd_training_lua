@@ -26,7 +26,9 @@ require("src/gamestate")
 
 math.randomseed(os.time())
 
-local function unique_id() return tostring(os.time()) .. tostring(math.random(100000, 999999)) end
+local function unique_id()
+    return tostring(os.time()) .. tostring(math.random(100000, 999999))
+end
 
 local function escape_json_string(str)
     if not str then return '' end
@@ -59,13 +61,21 @@ local function encode_json(value)
     if t == 'table' then
         local buffer = {}
         if is_array(value) then
-            for i = 1, #value do buffer[#buffer + 1] = encode_json(value[i]) end
+            for i = 1, #value do
+                buffer[#buffer + 1] = encode_json(value[i])
+            end
             return '[' .. table.concat(buffer, ',') .. ']'
         else
             local keys = {}
             for key, _ in pairs(value) do keys[#keys + 1] = key end
-            table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
-            for _, key in ipairs(keys) do buffer[#buffer + 1] = '"' .. escape_json_string(tostring(key)) .. '":' .. encode_json(value[key]) end
+            table.sort(keys, function(a, b)
+                return tostring(a) < tostring(b)
+            end)
+            for _, key in ipairs(keys) do
+                buffer[#buffer + 1] =
+                    '"' .. escape_json_string(tostring(key)) .. '":' ..
+                        encode_json(value[key])
+            end
             return '{' .. table.concat(buffer, ',') .. '}'
         end
     end
@@ -100,7 +110,10 @@ local function parse_match_text(raw)
 
                 if parsed_value ~= nil then
                     if result[key] ~= nil then
-                        if type(result[key]) ~= 'table' or not is_array(result[key]) then result[key] = {result[key]} end
+                        if type(result[key]) ~= 'table' or
+                            not is_array(result[key]) then
+                            result[key] = {result[key]}
+                        end
                         table.insert(result[key], parsed_value)
                     else
                         result[key] = parsed_value
@@ -182,8 +195,10 @@ local data_reset = false; -- this is used to track when we should reset data for
 
 local function hyper_reflector_rendering()
     if GLOBAL_isHyperReflectorOnline then
-        gui.text(160, 8, player_1_total_wins_writing, util_colors.input_history.unknown1)
-        gui.text(221, 8, player_2_total_wins_writing, util_colors.input_history.unknown1)
+        gui.text(160, 8, player_1_total_wins_writing,
+                 util_colors.input_history.unknown1)
+        gui.text(221, 8, player_2_total_wins_writing,
+                 util_colors.input_history.unknown1)
         -- gui.text(2, 2, 'HYPER-REFLECTOR v030a', util_colors.gui.empty)
     end
 end
@@ -199,7 +214,8 @@ local function check_in_match()
     -- end
 
     -- initialize a match
-    if character_select_state == 4 and not match_initialized and stat_file == nil then -- this is initial char select and the select state has been reset
+    if character_select_state == 4 and not match_initialized and stat_file ==
+        nil then -- this is initial char select and the select state has been reset
         has_match_transitioned = false
         match_just_ended = false
         -- print('match was reset correctly')
@@ -228,8 +244,12 @@ local function check_in_match()
             current_win_count_p2 = 0
         end
 
-        local should_reset = (current_win_count_p1 == last_win_count_p1 and current_win_count_p2 == last_win_count_p2) or (current_win_count_p1 >= 1 and last_win_count_p1 == 0) or
-                                 (current_win_count_p2 >= 1 and last_win_count_p2 == 0) -- this indicates we fought a cpu
+        local should_reset = (current_win_count_p1 == last_win_count_p1 and
+                                 current_win_count_p2 == last_win_count_p2) or
+                                 (current_win_count_p1 >= 1 and
+                                     last_win_count_p1 == 0) or
+                                 (current_win_count_p2 >= 1 and
+                                     last_win_count_p2 == 0) -- this indicates we fought a cpu
 
         if should_reset then
             print('Detected dummy or CPU match. Resetting win counts.')
@@ -269,7 +289,8 @@ local function check_in_match()
     -- local byterange = memory.readbyterange(0x02011388, 12)
     -- local test = memory.readdword(0x02011388)
     -- print(byterange)
-    if has_match_transitioned and character_select_state == 5 and match_state == 7 then return 7 end
+    if has_match_transitioned and character_select_state == 5 and match_state ==
+        7 then return 7 end
     if character_select_state == 5 and match_state == 2 then
         -- make sure we are in the match
         has_match_transitioned = true
@@ -361,13 +382,18 @@ function GLOBAL_read_stat_memory()
             local p1_current_meter = memory.readbyte(0x020695B5)
             local p2_current_meter = memory.readbyte(0x020695E1)
 
-            if p1_current_meter <= p1_previous_meter then p1_previous_meter = p1_current_meter end
-            if p2_current_meter <= p2_previous_meter then p2_previous_meter = p2_current_meter end
+            if p1_current_meter <= p1_previous_meter then
+                p1_previous_meter = p1_current_meter
+            end
+            if p2_current_meter <= p2_previous_meter then
+                p2_previous_meter = p2_current_meter
+            end
 
             local p1_meter_gained = p1_current_meter - p1_previous_meter
             local p2_meter_gained = p2_current_meter - p2_previous_meter
             if p1_meter_gained > 0 then
-                p1_match_total_meter_gained = p1_match_total_meter_gained + p1_meter_gained
+                p1_match_total_meter_gained =
+                    p1_match_total_meter_gained + p1_meter_gained
                 p1_previous_meter = p1_current_meter
 
                 stat_file:write('\n p1-meter-gained:')
@@ -376,7 +402,8 @@ function GLOBAL_read_stat_memory()
                 stat_file:write(p1_match_total_meter_gained)
             end
             if p2_meter_gained > 0 then
-                p2_match_total_meter_gained = p2_match_total_meter_gained + p2_meter_gained
+                p2_match_total_meter_gained =
+                    p2_match_total_meter_gained + p2_meter_gained
                 p2_previous_meter = p2_current_meter
 
                 stat_file:write('\n p2-meter-gained:')
@@ -480,3 +507,4 @@ gui.register(hyper_reflector_rendering)
 -- emu.registerbefore(third_training.before_frame)
 -- gui.register(third_training.on_gui)
 -- pressing start should not pause the emulator this is not good =0
+-- test
