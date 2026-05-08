@@ -21,6 +21,29 @@ local ext_command_file = join_files_path("hyper_read_commands.txt")
 local match_track_file = join_files_path("hyper_track_match.txt")
 local module_character_select = require("src/modules/character_select")
 
+-- Settings: read once at load time from the same directory as this script.
+-- The app writes hyper_settings.txt next to hyper_reflector.lua before launch.
+local music_volume = 127  -- 0 = mute, 127 = full; applied every frame so GGPO rollbacks can't undo it
+
+local function resolve_script_dir()
+    local source = debug.getinfo(1, "S").source or ''
+    if source:sub(1, 1) == '@' then source = source:sub(2) end
+    source = source:gsub('\\', '/')
+    return source:match("^(.*)/[^/]+$") or '.'
+end
+
+local function load_settings()
+    local path = resolve_script_dir() .. '/hyper_settings.txt'
+    local f = io.open(path, "r")
+    if not f then return end
+    local content = f:read("*a")
+    f:close()
+    local vol = content:match("music_volume%s*:%s*(%d+)")
+    if vol then music_volume = math.max(0, math.min(127, tonumber(vol) or 127)) end
+end
+
+load_settings()
+
 -- game state
 require("src/gamestate")
 
@@ -319,6 +342,7 @@ end
 
 -- Lua writes current stat tracking to a text file here
 function GLOBAL_read_stat_memory()
+    if music_volume < 127 then memory.writebyte(0x02078D06, music_volume) end
     local match_state_key = check_in_match()
     if stat_file then
         if match_state_key == 2 then
