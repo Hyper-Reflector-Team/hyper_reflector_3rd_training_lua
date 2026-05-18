@@ -4,6 +4,7 @@ local third_training = require("3rd_training")
 local util_draw = require("src/utils/draw");
 local util_colors = require("src/utils/colors")
 require("src/tools")
+local hr_data_collector = require("src/modules/hr_data_collector")
 
 local function resolve_files_base()
     local source = debug.getinfo(1, "S").source or ''
@@ -216,6 +217,19 @@ local function hyper_reflector_rendering()
         gui.text(160, 8, player_1_total_wins, util_colors.input_history.unknown1)
         gui.text(221, 8, player_2_total_wins, util_colors.input_history.unknown1)
     end
+
+    -- DEBUG: throw stat overlay (remove when counts are verified)
+    if stat_file then
+        local dc = hr_data_collector.get_stats()
+        local y = 20
+        gui.text(4, y,      "-- THROW DEBUG --",          0xFFFFFFFF)
+        gui.text(4, y + 8,  "P1 throws:  " .. dc.p1.throws,       0xFF88FFFF)
+        gui.text(4, y + 16, "P1 whiffs:  " .. dc.p1.throw_whiffs,  0xFFFFAA44)
+        gui.text(4, y + 24, "P1 techs:   " .. dc.p1.throw_techs,   0xFFAAFF88)
+        gui.text(4, y + 32, "P2 throws:  " .. dc.p2.throws,       0xFF88FFFF)
+        gui.text(4, y + 40, "P2 whiffs:  " .. dc.p2.throw_whiffs,  0xFFFFAA44)
+        gui.text(4, y + 48, "P2 techs:   " .. dc.p2.throw_techs,   0xFFAAFF88)
+    end
 end
 
 local function check_in_match()
@@ -257,6 +271,7 @@ local function check_in_match()
 
         p1_previous_meter = 0
         p2_previous_meter = 0
+        hr_data_collector.reset()
         match_initialized = true
         wins_checked = false
         close_frame_delay = 0
@@ -345,6 +360,7 @@ function GLOBAL_read_stat_memory()
     if music_volume < 127 then memory.writebyte(0x02078D06, music_volume) end
     local match_state_key = check_in_match()
     if stat_file then
+        hr_data_collector.update()
         if match_state_key == 2 then
             local p1_current_meter = memory.readbyte(0x020695B5)
             local p2_current_meter = memory.readbyte(0x020695E1)
@@ -394,6 +410,35 @@ function GLOBAL_read_stat_memory()
                 total_match_count = total_match_count + 1
                 match_initialized = false
                 match_just_ended = false
+                local dc = hr_data_collector.get_stats()
+                stat_file:write('\n p1-knockdowns:')
+                stat_file:write(dc.p1.knockdowns)
+                stat_file:write('\n p1-fast-wakeups:')
+                stat_file:write(dc.p1.fast_wakeups)
+                stat_file:write('\n p1-parries:')
+                stat_file:write(dc.p1.parries)
+                stat_file:write('\n p1-throws:')
+                stat_file:write(dc.p1.throws)
+                stat_file:write('\n p1-throw-whiffs:')
+                stat_file:write(dc.p1.throw_whiffs)
+                stat_file:write('\n p1-supers-used:')
+                stat_file:write(dc.p1.supers_used)
+                stat_file:write('\n p1-throw-techs:')
+                stat_file:write(dc.p1.throw_techs)
+                stat_file:write('\n p2-knockdowns:')
+                stat_file:write(dc.p2.knockdowns)
+                stat_file:write('\n p2-fast-wakeups:')
+                stat_file:write(dc.p2.fast_wakeups)
+                stat_file:write('\n p2-parries:')
+                stat_file:write(dc.p2.parries)
+                stat_file:write('\n p2-throws:')
+                stat_file:write(dc.p2.throws)
+                stat_file:write('\n p2-throw-whiffs:')
+                stat_file:write(dc.p2.throw_whiffs)
+                stat_file:write('\n p2-supers-used:')
+                stat_file:write(dc.p2.supers_used)
+                stat_file:write('\n p2-throw-techs:')
+                stat_file:write(dc.p2.throw_techs)
                 print('Closing stat file and signalling frontend.')
                 stat_file:close()
                 convert_match_file_to_json()
