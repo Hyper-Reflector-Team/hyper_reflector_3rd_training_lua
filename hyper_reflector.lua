@@ -5,6 +5,7 @@ local util_draw = require("src/utils/draw");
 local util_colors = require("src/utils/colors")
 require("src/tools")
 local hr_data_collector = require("src/modules/hr_data_collector")
+local hr_position_recorder = require("src/modules/hr_position_recorder")
 
 local function resolve_files_base()
     local source = debug.getinfo(1, "S").source or ''
@@ -272,6 +273,7 @@ local function check_in_match()
         p1_previous_meter = 0
         p2_previous_meter = 0
         hr_data_collector.reset()
+        hr_position_recorder.reset()
         match_initialized = true
         wins_checked = false
         close_frame_delay = 0
@@ -361,6 +363,7 @@ function GLOBAL_read_stat_memory()
     local match_state_key = check_in_match()
     if stat_file then
         hr_data_collector.update()
+        hr_position_recorder.update()
         if match_state_key == 2 then
             local p1_current_meter = memory.readbyte(0x020695B5)
             local p2_current_meter = memory.readbyte(0x020695E1)
@@ -439,6 +442,8 @@ function GLOBAL_read_stat_memory()
                 stat_file:write(dc.p2.supers_used)
                 stat_file:write('\n p2-throw-techs:')
                 stat_file:write(dc.p2.throw_techs)
+                local replay_path = join_files_path("hyper_position_replay.json")
+                hr_position_recorder.write(replay_path)
                 print('Closing stat file and signalling frontend.')
                 stat_file:close()
                 convert_match_file_to_json()
